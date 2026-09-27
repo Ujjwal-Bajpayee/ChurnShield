@@ -40,20 +40,24 @@ FEATURE_LABELS = {
     "AvgMonthlySpend": "Average Monthly Spend",
     "ChargeRatio": "Monthly to Avg Spend Ratio",
     "ServiceCount": "Subscribed Services Count",
+    "CostPerService": "Cost Per Service",
+    "DiscountRatio": "Lifetime Billing vs Expected Ratio",
+    "IsHighRiskTriad": "High-Risk Segment Flag",
+    "IsShortTenureMonthToMonth": "New Month-to-Month Customer",
     "HasStreaming": "Streaming Services Active",
-    "IsShortTenureMonthToMonth": "New Month-to-Month Customer"
+    "TenureCohort": "Tenure Cohort"
 }
 
 def format_feature_value(feature, value):
     if feature == "tenure":
         return f"{value} months"
-    if feature in ["MonthlyCharges", "TotalCharges", "AvgMonthlySpend"]:
+    if feature in ["MonthlyCharges", "TotalCharges", "AvgMonthlySpend", "CostPerService"]:
         return f"${float(value):,.2f}"
-    if feature == "ChargeRatio":
+    if feature in ["ChargeRatio", "DiscountRatio"]:
         return f"{float(value):.2f}x"
     if feature == "ServiceCount":
         return f"{int(value)} services"
-    if feature in ["SeniorCitizen", "HasStreaming", "IsShortTenureMonthToMonth"]:
+    if feature in ["SeniorCitizen", "HasStreaming", "IsShortTenureMonthToMonth", "IsHighRiskTriad"]:
         return "Yes" if int(value) == 1 else "No"
     return str(value)
 
@@ -76,6 +80,8 @@ def get_explanation_text(feature, value, direction):
             base_text = f"The customer uses {value} internet service."
     elif feature == "tenure":
         base_text = f"The customer has been with the company for {value} months."
+    elif feature == "TenureCohort":
+        base_text = f"The customer belongs to the {value} tenure window."
     elif feature == "MonthlyCharges":
         base_text = f"The customer's monthly charge is ${float(value):.2f}."
     elif feature == "TotalCharges":
@@ -84,6 +90,13 @@ def get_explanation_text(feature, value, direction):
         base_text = f"The customer averages ${float(value):.2f} per month across their tenure."
     elif feature == "ChargeRatio":
         base_text = f"The ratio of current monthly bill to average tenure spend is {float(value):.2f}x."
+    elif feature == "CostPerService":
+        base_text = f"The customer pays ${float(value):.2f} per subscribed service."
+    elif feature == "DiscountRatio":
+        base_text = f"The ratio of total billing compared to un-discounted expectations is {float(value):.2f}x."
+    elif feature == "IsHighRiskTriad":
+        status = "Yes" if int(value) == 1 else "No"
+        base_text = f"Customer falls into the high-risk triad (Fiber + Month-to-month + Electronic check: {status})."
     elif feature == "ServiceCount":
         base_text = f"The customer currently subscribes to {int(value)} add-on services."
     elif feature == "IsShortTenureMonthToMonth":
@@ -140,8 +153,8 @@ st.subheader("Customer Churn Risk Prediction & Explainability Platform")
 
 st.write(
     """
-    ChurnShield predicts customer churn risk with calibrated ML pipelines
-    and provides exact, non-redundant factor attributions using SHAP.
+    ChurnShield delivers calibrated churn risk predictions powered by an ensemble machine learning pipeline
+    with non-redundant, feature-level SHAP attributions.
     """
 )
 
@@ -326,30 +339,30 @@ if st.button(
 
     with col4:
         st.metric(
-            "Optimal Threshold",
+            "Decision Cutoff",
             f"{threshold * 100:.1f}%"
         )
 
-    st.caption(f"Active Classifier: **{model_name}** | Optimized for F1 & Business Value")
+    st.caption(f"Active Ensemble Pipeline: **{model_name}** | Threshold Optimized for Business F1")
 
     if probability >= 0.7:
         st.warning(
             f"""
-            The model estimates a **{probability * 100:.1f}% probability**
+            The ensemble estimates a **{probability * 100:.1f}% probability**
             that this customer will churn. High churn risk detected.
             """
         )
     elif probability >= 0.4:
         st.info(
             f"""
-            The model estimates a **{probability * 100:.1f}% probability**
+            The ensemble estimates a **{probability * 100:.1f}% probability**
             that this customer will churn. Moderate churn risk detected.
             """
         )
     else:
         st.success(
             f"""
-            The model estimates a **{probability * 100:.1f}% probability**
+            The ensemble estimates a **{probability * 100:.1f}% probability**
             that this customer will churn. Customer exhibits strong retention signals.
             """
         )
@@ -361,7 +374,7 @@ if st.button(
     st.write(
         """
         **SHAP (SHapley Additive exPlanations)** computes each feature's exact contribution
-        relative to baseline customer profiles.
+        relative to the baseline customer population.
         """
     )
 

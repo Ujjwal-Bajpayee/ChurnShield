@@ -16,23 +16,36 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         X = X.copy()
         if "TotalCharges" in X.columns:
             X["TotalCharges"] = pd.to_numeric(X["TotalCharges"], errors="coerce").fillna(0.0)
-        
+
         tenure = X["tenure"].astype(float) if "tenure" in X.columns else pd.Series(0.0, index=X.index)
         monthly = X["MonthlyCharges"].astype(float) if "MonthlyCharges" in X.columns else pd.Series(0.0, index=X.index)
         total = X["TotalCharges"].astype(float) if "TotalCharges" in X.columns else pd.Series(0.0, index=X.index)
 
         X["AvgMonthlySpend"] = total / (tenure + 1.0)
         X["ChargeRatio"] = monthly / (X["AvgMonthlySpend"] + 1.0)
-        
+
         services = ["OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport", "StreamingTV", "StreamingMovies"]
         X["ServiceCount"] = sum((X[s] == "Yes").astype(int) for s in services if s in X.columns)
-        
+        X["CostPerService"] = monthly / (X["ServiceCount"] + 1.0)
+
+        expected_total = monthly * tenure
+        X["DiscountRatio"] = (total + 1.0) / (expected_total + 1.0)
+
+        contract = X["Contract"] if "Contract" in X.columns else pd.Series("", index=X.index)
+        internet = X["InternetService"] if "InternetService" in X.columns else pd.Series("", index=X.index)
+        payment = X["PaymentMethod"] if "PaymentMethod" in X.columns else pd.Series("", index=X.index)
+
+        X["IsHighRiskTriad"] = ((contract == "Month-to-month") & (internet == "Fiber optic") & (payment == "Electronic check")).astype(int)
+        X["IsShortTenureMonthToMonth"] = ((contract == "Month-to-month") & (tenure <= 12)).astype(int)
+
         streaming_tv = X["StreamingTV"] if "StreamingTV" in X.columns else pd.Series("No", index=X.index)
         streaming_movies = X["StreamingMovies"] if "StreamingMovies" in X.columns else pd.Series("No", index=X.index)
         X["HasStreaming"] = ((streaming_tv == "Yes") | (streaming_movies == "Yes")).astype(int)
-        
-        contract = X["Contract"] if "Contract" in X.columns else pd.Series("", index=X.index)
-        X["IsShortTenureMonthToMonth"] = ((contract == "Month-to-month") & (tenure <= 12)).astype(int)
+
+        tenure_bins = [-1, 6, 12, 24, 48, 100]
+        tenure_labels = ["0-6m", "6-12m", "1-2y", "2-4y", "4y+"]
+        X["TenureCohort"] = pd.cut(tenure, bins=tenure_bins, labels=tenure_labels).astype(str)
+
         return X
 
 def get_preprocessor():
@@ -44,8 +57,11 @@ def get_preprocessor():
         "AvgMonthlySpend",
         "ChargeRatio",
         "ServiceCount",
-        "HasStreaming",
-        "IsShortTenureMonthToMonth"
+        "CostPerService",
+        "DiscountRatio",
+        "IsHighRiskTriad",
+        "IsShortTenureMonthToMonth",
+        "HasStreaming"
     ]
 
     categorical_features = [
@@ -63,7 +79,8 @@ def get_preprocessor():
         "StreamingMovies",
         "Contract",
         "PaperlessBilling",
-        "PaymentMethod"
+        "PaymentMethod",
+        "TenureCohort"
     ]
 
     numerical_pipeline = Pipeline([

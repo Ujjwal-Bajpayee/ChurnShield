@@ -7,7 +7,6 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     precision_score,
     recall_score,
@@ -64,14 +63,14 @@ def train():
     scale_weight = float(neg_count / max(pos_count, 1))
 
     base_lr = LogisticRegression(
-        C=0.1,
+        C=0.08,
         max_iter=1000,
         class_weight="balanced",
         random_state=42
     )
 
     base_rf = RandomForestClassifier(
-        n_estimators=300,
+        n_estimators=350,
         max_depth=8,
         min_samples_leaf=4,
         class_weight="balanced_subsample",
@@ -79,11 +78,11 @@ def train():
     )
 
     base_xgb = XGBClassifier(
-        n_estimators=250,
+        n_estimators=300,
         max_depth=4,
-        learning_rate=0.03,
+        learning_rate=0.025,
         subsample=0.8,
-        colsample_bytree=0.8,
+        colsample_bytree=0.75,
         scale_pos_weight=scale_weight,
         eval_metric="logloss",
         random_state=42

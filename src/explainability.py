@@ -30,8 +30,12 @@ ALL_EXPLAINED_FEATURES = [
     "AvgMonthlySpend",
     "ChargeRatio",
     "ServiceCount",
+    "CostPerService",
+    "DiscountRatio",
+    "IsHighRiskTriad",
+    "IsShortTenureMonthToMonth",
     "HasStreaming",
-    "IsShortTenureMonthToMonth"
+    "TenureCohort"
 ]
 
 DEFAULT_SAMPLE = {
@@ -70,16 +74,9 @@ class ChurnExplainer:
         self.preprocessor = self.pipeline.named_steps["preprocessor"]
         self.model = self.pipeline.named_steps["model"]
 
-        background_df = self._load_background_data(data_path)
-        background_transformed = self.preprocessor.transform(background_df)
-
-        try:
-            self.explainer = shap.Explainer(self.model, background_transformed)
-        except Exception:
-            try:
-                self.explainer = shap.LinearExplainer(self.model, background_transformed)
-            except Exception:
-                self.explainer = shap.TreeExplainer(self.model)
+        self.background_df = self._load_background_data(data_path)
+        self.background_transformed = self.preprocessor.transform(self.background_df)
+        self.explainers = self._init_explainers()
 
     def _load_background_data(self, data_path):
         if data_path.exists():
@@ -87,12 +84,31 @@ class ChurnExplainer:
                 df = pd.read_csv(data_path)
                 drop_cols = [c for c in ["Churn", "customerID"] if c in df.columns]
                 df = df.drop(columns=drop_cols)
-                if len(df) > 100:
-                    return df.sample(100, random_state=42)
+                if len(df) > 50:
+                    return df.sample(50, random_state=42)
                 return df
             except Exception:
                 pass
         return pd.DataFrame([DEFAULT_SAMPLE])
+
+    def _init_explainers(self):
+        explainers = []
+        estimators = self.model.estimators_ if hasattr(self.model, "estimators_") else [self.model]
+        for est in estimators:
+            try:
+                exp = shap.Explainer(est, self.background_transformed)
+                explainers.append(("explainer", exp, est))
+            except Exception:
+                try:
+                    exp = shap.LinearExplainer(est, self.background_transformed)
+                    explainers.append(("linear", exp, est))
+                except Exception:
+                    try:
+                        exp = shap.TreeExplainer(est)
+                        explainers.append(("tree", exp, est))
+                    except Exception:
+                        pass
+        return explainers
 
     def _map_feature_name(self, raw_name):
         clean = raw_name.replace("numerical__", "").replace("categorical__", "")
@@ -105,15 +121,34 @@ class ChurnExplainer:
         df = pd.DataFrame([customer_data])
         X_transformed = self.preprocessor.transform(df)
 
-        shap_obj = self.explainer(X_transformed)
-        values = shap_obj.values
+        sv_list = []
+        for exp_type, exp, est in self.explainers:
+            try:
+                if exp_type == "tree":
+                    sv = exp.shap_values(X_transformed)
+                    if isinstance(sv, list):
+                        sv_list.append(sv[1][0] if len(sv) > 1 else sv[0][0])
+                    elif len(sv.shape) == 3:
+                        sv_list.append(sv[0, :, 1])
+                    else:
+                        sv_list.append(sv[0])
+                else:
+                    shap_obj = exp(X_transformed)
+                    values = shap_obj.values
+                    if len(values.shape) == 3:
+                        sv_list.append(values[0, :, 1])
+                    elif len(values.shape) == 2:
+                        sv_list.append(values[0])
+                    else:
+                        sv_list.append(np.array(values).flatten())
+            except Exception:
+                pass
 
-        if len(values.shape) == 3:
-            raw_shap_values = values[0, :, 1]
-        elif len(values.shape) == 2:
-            raw_shap_values = values[0]
+        if sv_list:
+            raw_shap_values = np.mean(sv_list, axis=0)
         else:
-            raw_shap_values = np.array(values).flatten()
+            transformer_step = self.preprocessor.named_steps["transformer"]
+            raw_shap_values = np.zeros(len(transformer_step.get_feature_names_out()))
 
         transformer_step = self.preprocessor.named_steps["transformer"]
         feature_names = transformer_step.get_feature_names_out()
@@ -126,10 +161,10 @@ class ChurnExplainer:
             raw_df["feature"] = raw_df["raw_feature"].apply(self._map_feature_name)
 
             explanation = raw_df.groupby("feature", as_index=False)["shap_value"].sum()
-            
+
             fe_step = self.preprocessor.named_steps.get("feature_engineer")
             engineered_df = fe_step.transform(df) if fe_step else df
-            
+
             explanation["feature_value"] = explanation["feature"].apply(
                 lambda f: engineered_df[f].iloc[0] if f in engineered_df.columns else customer_data.get(f, "")
             )
