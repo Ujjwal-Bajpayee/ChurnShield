@@ -29,10 +29,10 @@ flowchart TD
 
     subgraph Modeling["Model Training & Selection"]
         Train["model_training.py"]
-        LR["Logistic Regression"]
-        RF["Random Forest"]
-        XGB["XGBoost"]
-        Ens["Soft Voting Ensemble"]
+        LR["Logistic Regression\n(Linear Baseline)"]
+        RF["Random Forest\n(Bagging Ensemble)"]
+        XGB["XGBoost\n(Gradient Boosting)"]
+        Ens["Soft Voting Ensemble\n(Averages Probabilities)"]
         Eval["Model Evaluator & Threshold Optimizer\n(F1, ROC-AUC, Precision, Recall, PR-AUC)"]
     end
 
@@ -44,7 +44,9 @@ flowchart TD
 
     S3 --> Ingest --> RawCSV --> Validate --> ValCSV --> Transform
     Transform --> Train
-    Train --> LR & RF & XGB & Ens --> Eval
+    Train --> LR & RF & XGB
+    LR & RF & XGB --> Ens
+    Ens & LR & RF & XGB --> Eval
     Eval -->|Save Best Pipeline & Threshold| ModelPkl
 
     ModelPkl --> Predictor
@@ -77,6 +79,29 @@ flowchart TD
 | Random Forest | 0.593 | 0.580 | 0.668 | 0.621 | 0.844 | 0.659 |
 
 *The Soft Voting Ensemble achieved the highest ROC-AUC (0.847), PR-AUC (0.662), and Recall (0.770), successfully identifying 77% of all churners.*
+
+## Why These Three Algorithms Were Chosen
+
+The ensemble combines three distinct machine learning paradigms to leverage the principle of **algorithmic diversity**:
+
+1. **Logistic Regression (Linear Paradigm)**:
+   - **Strength**: Provides a smooth, regularized global decision surface that excels at modeling continuous attributes like tenure and total charges.
+   - **Role in Ensemble**: Anchors the ensemble with well-calibrated baseline probabilities and prevents extreme predictions on borderline cases.
+
+2. **Random Forest (Bagging Paradigm)**:
+   - **Strength**: Uses parallel decision trees trained on bootstrap samples with random feature subsets to capture non-linear step-functions without overfitting.
+   - **Role in Ensemble**: Reduces prediction variance and effectively handles high-order categorical feature interactions.
+
+3. **XGBoost (Boosting Paradigm)**:
+   - **Strength**: Sequentially builds shallow trees where each new tree specifically targets the residual errors of preceding trees.
+   - **Role in Ensemble**: Excels at isolating subtle risk interactions (e.g., specific combinations of contract type, internet service, and payment methods).
+
+### Why Combine Them via Soft Voting?
+Combining models from the same algorithmic family tends to reproduce the same blind spots. By pairing **Linear + Bagging + Boosting**, the individual prediction errors are uncorrelated:
+
+$$P(\text{Churn}) = \frac{P_{\text{Logistic Regression}} + P_{\text{Random Forest}} + P_{\text{XGBoost}}}{3}$$
+
+This probability averaging smooths out individual model noise, resulting in higher generalization metrics (0.847 ROC-AUC, 0.770 Recall) than any single classifier alone.
 
 ## Project Structure
 
