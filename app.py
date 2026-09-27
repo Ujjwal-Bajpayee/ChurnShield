@@ -4,22 +4,18 @@ import pandas as pd
 from src.prediction import ChurnPredictor
 from src.explainability import ChurnExplainer
 
-
 st.set_page_config(
     page_title="ChurnShield",
     layout="wide"
 )
 
-
 @st.cache_resource
 def load_predictor():
     return ChurnPredictor()
 
-
 @st.cache_resource
 def load_explainer():
     return ChurnExplainer()
-
 
 FEATURE_LABELS = {
     "gender": "Gender",
@@ -40,19 +36,26 @@ FEATURE_LABELS = {
     "PaperlessBilling": "Paperless Billing",
     "PaymentMethod": "Payment Method",
     "MonthlyCharges": "Monthly Charges",
-    "TotalCharges": "Total Charges"
+    "TotalCharges": "Total Charges",
+    "AvgMonthlySpend": "Average Monthly Spend",
+    "ChargeRatio": "Monthly to Avg Spend Ratio",
+    "ServiceCount": "Subscribed Services Count",
+    "HasStreaming": "Streaming Services Active",
+    "IsShortTenureMonthToMonth": "New Month-to-Month Customer"
 }
-
 
 def format_feature_value(feature, value):
     if feature == "tenure":
         return f"{value} months"
-    if feature in ["MonthlyCharges", "TotalCharges"]:
+    if feature in ["MonthlyCharges", "TotalCharges", "AvgMonthlySpend"]:
         return f"${float(value):,.2f}"
-    if feature == "SeniorCitizen":
-        return "Yes" if value == 1 else "No"
+    if feature == "ChargeRatio":
+        return f"{float(value):.2f}x"
+    if feature == "ServiceCount":
+        return f"{int(value)} services"
+    if feature in ["SeniorCitizen", "HasStreaming", "IsShortTenureMonthToMonth"]:
+        return "Yes" if int(value) == 1 else "No"
     return str(value)
-
 
 def format_feature_name(feature, value=None):
     label = FEATURE_LABELS.get(feature, feature)
@@ -60,7 +63,6 @@ def format_feature_name(feature, value=None):
         val_str = format_feature_value(feature, value)
         return f"{label}: {val_str}"
     return label
-
 
 def get_explanation_text(feature, value, direction):
     label = FEATURE_LABELS.get(feature, feature)
@@ -77,11 +79,23 @@ def get_explanation_text(feature, value, direction):
     elif feature == "MonthlyCharges":
         base_text = f"The customer's monthly charge is ${float(value):.2f}."
     elif feature == "TotalCharges":
-        base_text = f"The customer's accumulated total charges are ${float(value):.2f}."
+        base_text = f"The customer's total accumulated charges are ${float(value):.2f}."
+    elif feature == "AvgMonthlySpend":
+        base_text = f"The customer averages ${float(value):.2f} per month across their tenure."
+    elif feature == "ChargeRatio":
+        base_text = f"The ratio of current monthly bill to average tenure spend is {float(value):.2f}x."
+    elif feature == "ServiceCount":
+        base_text = f"The customer currently subscribes to {int(value)} add-on services."
+    elif feature == "IsShortTenureMonthToMonth":
+        status = "Yes" if int(value) == 1 else "No"
+        base_text = f"The customer is a new subscriber on a month-to-month plan ({status})."
+    elif feature == "HasStreaming":
+        status = "Yes" if int(value) == 1 else "No"
+        base_text = f"The customer has active streaming add-ons ({status})."
     elif feature == "PaymentMethod":
         base_text = f"The customer pays via {value.lower()}."
     elif feature == "SeniorCitizen":
-        status = "Yes" if value == 1 else "No"
+        status = "Yes" if int(value) == 1 else "No"
         base_text = f"The customer is a senior citizen: {status}."
     elif feature == "gender":
         base_text = f"The customer is {value.lower()}."
@@ -118,26 +132,22 @@ def get_explanation_text(feature, value, direction):
         return f"{base_text} This characteristic increased the model's estimated churn risk."
     return f"{base_text} This characteristic reduced the model's estimated churn risk."
 
-
 predictor = load_predictor()
 explainer = load_explainer()
-
 
 st.title("🛡️ ChurnShield")
 st.subheader("Customer Churn Risk Prediction & Explainability Platform")
 
 st.write(
     """
-    ChurnShield predicts whether a customer is likely to leave
-    the company and explains the key factors driving the prediction using SHAP.
+    ChurnShield predicts customer churn risk with calibrated ML pipelines
+    and provides exact, non-redundant factor attributions using SHAP.
     """
 )
-
 
 st.header("Customer Information")
 
 col1, col2, col3 = st.columns(3)
-
 
 with col1:
     gender = st.selectbox(
@@ -173,7 +183,6 @@ with col1:
         ["Yes", "No"]
     )
 
-
 with col2:
     multiple_lines = st.selectbox(
         "Multiple Lines",
@@ -204,7 +213,6 @@ with col2:
         "Tech Support",
         ["Yes", "No", "No internet service"]
     )
-
 
 with col3:
     streaming_tv = st.selectbox(
@@ -253,7 +261,6 @@ with col3:
         value=1000.0
     )
 
-
 customer = {
     "gender": gender,
     "SeniorCitizen": senior_citizen,
@@ -276,24 +283,23 @@ customer = {
     "TotalCharges": total_charges
 }
 
-
 st.divider()
-
 
 if st.button(
     "Predict Churn",
     type="primary"
 ):
-
     result = predictor.predict(customer)
 
     probability = result["churn_probability"]
     prediction = result["prediction"]
     risk = result["risk"]
+    threshold = result["threshold"]
+    model_name = result["model_name"]
 
-    st.header("Prediction")
+    st.header("Prediction Analysis")
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
@@ -303,7 +309,7 @@ if st.button(
 
     with col2:
         st.metric(
-            "Risk Level",
+            "Risk Category",
             risk
         )
 
@@ -313,39 +319,38 @@ if st.button(
             if prediction == 1
             else "Likely to Stay"
         )
-
         st.metric(
-            "Prediction",
+            "Decision",
             prediction_text
         )
 
-    st.subheader("What does this mean?")
+    with col4:
+        st.metric(
+            "Optimal Threshold",
+            f"{threshold * 100:.1f}%"
+        )
+
+    st.caption(f"Active Classifier: **{model_name}** | Optimized for F1 & Business Value")
 
     if probability >= 0.7:
         st.warning(
             f"""
             The model estimates a **{probability * 100:.1f}% probability**
-            that this customer may leave the company.
-
-            This customer shows a **high predicted churn risk**. Immediate retention strategies are recommended.
+            that this customer will churn. High churn risk detected.
             """
         )
     elif probability >= 0.4:
         st.info(
             f"""
             The model estimates a **{probability * 100:.1f}% probability**
-            that this customer may leave the company.
-
-            The customer shows **moderate signs of churn risk**. Consider proactive engagement.
+            that this customer will churn. Moderate churn risk detected.
             """
         )
     else:
         st.success(
             f"""
             The model estimates a **{probability * 100:.1f}% probability**
-            that this customer may leave the company.
-
-            Based on the information provided, the customer currently shows **low churn risk**.
+            that this customer will churn. Customer exhibits strong retention signals.
             """
         )
 
@@ -355,9 +360,8 @@ if st.button(
 
     st.write(
         """
-        The model considers multiple characteristics of the customer.
-        **SHAP (SHapley Additive exPlanations)** calculates the exact contribution of each factor
-        toward the final churn risk score.
+        **SHAP (SHapley Additive exPlanations)** computes each feature's exact contribution
+        relative to baseline customer profiles.
         """
     )
 
@@ -380,7 +384,7 @@ if st.button(
 
         if increasing_risk.empty:
             st.write(
-                "None of the primary contributing factors increased the model's estimated churn risk."
+                "None of the primary factors significantly increased estimated churn risk."
             )
         else:
             for _, row in increasing_risk.iterrows():
@@ -401,7 +405,7 @@ if st.button(
 
         if decreasing_risk.empty:
             st.write(
-                "None of the primary contributing factors reduced the model's estimated churn risk."
+                "None of the primary factors significantly reduced estimated churn risk."
             )
         else:
             for _, row in decreasing_risk.iterrows():
@@ -417,7 +421,7 @@ if st.button(
                     f"{explanation_text} (SHAP contribution: {shap_val:.4f})"
                 )
 
-    with st.expander("📊 View detailed model explanation (All Features)"):
+    with st.expander("📊 View detailed feature contributions (All Features)"):
         display_df = explanation.copy()
 
         display_df["Feature"] = display_df["feature"].apply(
@@ -466,9 +470,7 @@ if st.button(
 
     st.caption(
         """
-        ℹ️ **Note on Explainability**: SHAP values indicate how individual features influenced
-        the model's prediction relative to the baseline population. Positive values push the
-        prediction toward churn, while negative values push it toward customer retention.
-        SHAP describes model behavior and should not be interpreted as causal proof.
+        ℹ️ **SHAP Attribution Note**: Positive contributions increase predicted churn risk,
+        while negative contributions push the score toward customer retention.
         """
     )

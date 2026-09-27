@@ -6,9 +6,9 @@ An end-to-end customer churn prediction system that predicts churn risk and prov
 
 ChurnShield is built around a production-oriented machine learning and explainability pipeline:
 
-**S3 → Data Ingestion → Data Validation → Preprocessing → Model Training → Evaluation → SHAP Explainability → Streamlit UI**
+**S3 → Data Ingestion → Data Validation → Preprocessing & Feature Engineering → Model Training & Ensembling → Threshold Optimization → SHAP Explainability → Streamlit UI**
 
-The project compares multiple classification models and exposes the final prediction through an interactive Streamlit application.
+The project compares multiple classification models, tunes optimal decision thresholds, and exposes the final prediction through an interactive Streamlit application.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ flowchart TD
     subgraph Pipeline["Data Pipeline"]
         Ingest["data_ingestion.py\n(Boto3 S3 Ingestion)"]
         Validate["data_validation.py\n(Schema & Integrity Checks)"]
-        Transform["data_transformation.py\n(Imputation, Scaling & OneHotEncoding)"]
+        Transform["data_transformation.py\n(Domain Feature Engineering, Scaling & OneHotEncoding)"]
     end
 
     subgraph Modeling["Model Training & Selection"]
@@ -32,19 +32,20 @@ flowchart TD
         LR["Logistic Regression"]
         RF["Random Forest"]
         XGB["XGBoost"]
-        Eval["Model Evaluator\n(F1, ROC-AUC, Precision, Recall, PR-AUC)"]
+        Ens["Voting Ensemble"]
+        Eval["Model Evaluator & Threshold Optimizer\n(F1, ROC-AUC, Precision, Recall, PR-AUC)"]
     end
 
     subgraph Serving["Serving & Explainability Layer"]
         UI["app.py\n(Streamlit Dashboard)"]
-        Predictor["src/prediction.py\n(Probability & Risk Scoring)"]
+        Predictor["src/prediction.py\n(Calibrated Probability & Optimal Threshold Scoring)"]
         Explainer["src/explainability.py\n(SHAP Explainer & Feature Attribution)"]
     end
 
     S3 --> Ingest --> RawCSV --> Validate --> ValCSV --> Transform
     Transform --> Train
-    Train --> LR & RF & XGB --> Eval
-    Eval -->|Save Best Pipeline| ModelPkl
+    Train --> LR & RF & XGB & Ens --> Eval
+    Eval -->|Save Best Pipeline & Threshold| ModelPkl
 
     ModelPkl --> Predictor
     ModelPkl --> Explainer
@@ -60,21 +61,22 @@ flowchart TD
 
 - **Automated Data Ingestion**: Secure retrieval from Amazon S3.
 - **Dataset Validation & Preprocessing**: Automated schema integrity checks, type coercion, and deduplication.
-- **Feature Engineering**: Robust scikit-learn preprocessing pipeline featuring `ColumnTransformer`, `StandardScaler`, and `OneHotEncoder`.
-- **Model Benchmarking**: Multi-model comparison across Logistic Regression, Random Forest, and XGBoost.
-- **Comprehensive Evaluation**: Benchmarking with Precision, Recall, F1, ROC-AUC, and PR-AUC.
+- **Domain Feature Engineering**: Custom transformer calculating tenure ratios, monthly spend velocity (`AvgMonthlySpend`, `ChargeRatio`), and service subscription depth (`ServiceCount`, `HasStreaming`, `IsShortTenureMonthToMonth`).
+- **Class-Weighted Modeling & Ensembles**: Handles class imbalance via balanced sample weights and gradient boosting scale penalties across Logistic Regression, Random Forest, XGBoost, and Soft Voting Ensembles.
+- **Decision Threshold Optimization**: Precision-Recall curve threshold optimization to maximize business F1-score.
 - **Aggregated SHAP Explainability**: Dynamic feature attribution that maps one-hot encoded variables back to original features, eliminating duplicate rows.
-- **Interactive Streamlit Interface**: Real-time customer churn risk scoring and side-by-side positive/negative factor analysis.
+- **Interactive Streamlit Interface**: Real-time customer churn risk scoring, optimal threshold metrics, and side-by-side positive/negative factor analysis.
 
 ## Models Comparison
 
-| Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
-|---|---:|---:|---:|---:|---:|
-| **Logistic Regression** | **0.504** | **0.783** | **0.614** | **0.841** | **0.633** |
-| Random Forest | 0.617 | 0.465 | 0.531 | 0.822 | 0.609 |
-| XGBoost | 0.660 | 0.508 | 0.574 | 0.842 | 0.654 |
+| Model | Optimal Threshold | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| **Logistic Regression** | **0.570** | **0.559** | **0.746** | **0.639** | **0.845** | **0.651** |
+| Random Forest | 0.569 | 0.564 | 0.706 | 0.627 | 0.844 | 0.658 |
+| XGBoost | 0.576 | 0.555 | 0.717 | 0.625 | 0.846 | 0.663 |
+| Voting Ensemble | 0.569 | 0.560 | 0.719 | 0.630 | 0.847 | 0.662 |
 
-*Logistic Regression is currently selected as the best deployment model based on F1 score.*
+*Logistic Regression with feature engineering and optimal thresholding is selected as the top model based on F1 score.*
 
 ## Project Structure
 
@@ -83,12 +85,12 @@ ChurnShield/
 ├── src/
 │   ├── data_ingestion.py        # S3 data ingestion
 │   ├── data_validation.py       # Data verification & cleaning
-│   ├── data_transformation.py   # Scikit-learn preprocessing pipelines
-│   ├── model_training.py        # Multi-model training and selection
+│   ├── data_transformation.py   # Feature engineering & preprocessing pipelines
+│   ├── model_training.py        # Multi-model training, threshold tuning, and selection
 │   ├── prediction.py            # Real-time inference service
 │   └── explainability.py        # SHAP explainability engine
 ├── artifacts/                   # Local raw & validated datasets
-├── models/                      # Serialized trained model pipeline
+├── models/                      # Serialized trained model pipeline bundle
 ├── app.py                       # Streamlit web application
 ├── requirements.txt             # Project dependencies
 ├── .env                         # Environment configurations
