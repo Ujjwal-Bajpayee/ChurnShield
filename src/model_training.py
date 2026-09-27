@@ -19,7 +19,10 @@ from sklearn.metrics import (
 
 from xgboost import XGBClassifier
 
-from data_transformation import prepare_features
+try:
+    from src.data_transformation import prepare_features
+except ImportError:
+    from data_transformation import prepare_features
 
 
 DATA_PATH = Path("artifacts/validated_data.csv")

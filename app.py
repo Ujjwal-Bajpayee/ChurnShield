@@ -21,199 +21,115 @@ def load_explainer():
     return ChurnExplainer()
 
 
-def format_feature_name(feature, customer):
-    feature = feature.replace(
-        "categorical__",
-        ""
-    ).replace(
-        "numerical__",
-        ""
-    )
-
-    categorical_features = {
-        "gender": "Gender",
-        "Partner": "Partner",
-        "Dependents": "Dependents",
-        "PhoneService": "Phone Service",
-        "MultipleLines": "Multiple Lines",
-        "InternetService": "Internet Service",
-        "OnlineSecurity": "Online Security",
-        "OnlineBackup": "Online Backup",
-        "DeviceProtection": "Device Protection",
-        "TechSupport": "Technical Support",
-        "StreamingTV": "Streaming TV",
-        "StreamingMovies": "Streaming Movies",
-        "Contract": "Contract Type",
-        "PaperlessBilling": "Paperless Billing",
-        "PaymentMethod": "Payment Method"
-    }
-
-    numerical_features = {
-        "tenure": "Tenure",
-        "MonthlyCharges": "Monthly Charges",
-        "TotalCharges": "Total Charges",
-        "SeniorCitizen": "Senior Citizen"
-    }
-
-    for feature_name, readable_name in categorical_features.items():
-
-        prefix = feature_name + "_"
-
-        if feature.startswith(prefix):
-
-            value = feature[len(prefix):]
-
-            return f"{readable_name}: {value}"
-
-    if feature in numerical_features:
-
-        readable_name = numerical_features[feature]
-        value = customer[feature]
-
-        if feature == "tenure":
-            return f"{readable_name}: {value} months"
-
-        if feature == "MonthlyCharges":
-            return f"{readable_name}: ${value:.2f}"
-
-        if feature == "TotalCharges":
-            return f"{readable_name}: ${value:.2f}"
-
-        if feature == "SeniorCitizen":
-            value = "Yes" if value == 1 else "No"
-            return f"{readable_name}: {value}"
-
-        return f"{readable_name}: {value}"
-
-    return feature
+FEATURE_LABELS = {
+    "gender": "Gender",
+    "SeniorCitizen": "Senior Citizen",
+    "Partner": "Partner",
+    "Dependents": "Dependents",
+    "tenure": "Tenure",
+    "PhoneService": "Phone Service",
+    "MultipleLines": "Multiple Lines",
+    "InternetService": "Internet Service",
+    "OnlineSecurity": "Online Security",
+    "OnlineBackup": "Online Backup",
+    "DeviceProtection": "Device Protection",
+    "TechSupport": "Tech Support",
+    "StreamingTV": "Streaming TV",
+    "StreamingMovies": "Streaming Movies",
+    "Contract": "Contract Type",
+    "PaperlessBilling": "Paperless Billing",
+    "PaymentMethod": "Payment Method",
+    "MonthlyCharges": "Monthly Charges",
+    "TotalCharges": "Total Charges"
+}
 
 
-def get_explanation_text(feature, direction, customer):
-    feature_clean = (
-        feature.replace("categorical__", "")
-        .replace("numerical__", "")
-    )
+def format_feature_value(feature, value):
+    if feature == "tenure":
+        return f"{value} months"
+    if feature in ["MonthlyCharges", "TotalCharges"]:
+        return f"${float(value):,.2f}"
+    if feature == "SeniorCitizen":
+        return "Yes" if value == 1 else "No"
+    return str(value)
 
-    descriptions = {
-        "Contract_Month-to-month":
-            "The customer is on a month-to-month contract.",
-        "Contract_One year":
-            "The customer is on a one-year contract.",
-        "Contract_Two year":
-            "The customer is on a two-year contract.",
-        "InternetService_DSL":
-            "The customer uses DSL internet service.",
-        "InternetService_Fiber optic":
-            "The customer uses fiber optic internet service.",
-        "InternetService_No":
-            "The customer does not have internet service.",
-        "StreamingTV_Yes":
-            "The customer has streaming TV service.",
-        "StreamingTV_No":
-            "The customer does not have streaming TV service.",
-        "StreamingMovies_Yes":
-            "The customer has streaming movie service.",
-        "StreamingMovies_No":
-            "The customer does not have streaming movie service.",
-        "MultipleLines_Yes":
-            "The customer has multiple phone lines.",
-        "MultipleLines_No":
-            "The customer does not have multiple phone lines.",
-        "Partner_Yes":
-            "The customer has a partner.",
-        "Partner_No":
-            "The customer does not have a partner.",
-        "Dependents_Yes":
-            "The customer has dependents.",
-        "Dependents_No":
-            "The customer does not have dependents.",
-        "OnlineSecurity_Yes":
-            "The customer has online security service.",
-        "OnlineSecurity_No":
-            "The customer does not have online security service.",
-        "OnlineBackup_Yes":
-            "The customer has online backup service.",
-        "OnlineBackup_No":
-            "The customer does not have online backup service.",
-        "DeviceProtection_Yes":
-            "The customer has device protection service.",
-        "DeviceProtection_No":
-            "The customer does not have device protection service.",
-        "TechSupport_Yes":
-            "The customer has technical support service.",
-        "TechSupport_No":
-            "The customer does not have technical support service.",
-        "PaperlessBilling_Yes":
-            "The customer uses paperless billing.",
-        "PaperlessBilling_No":
-            "The customer does not use paperless billing.",
-        "PhoneService_Yes":
-            "The customer has phone service.",
-        "PhoneService_No":
-            "The customer does not have phone service.",
-        "gender_Male":
-            "The customer is male.",
-        "gender_Female":
-            "The customer is female.",
-        "PaymentMethod_Electronic check":
-            "The customer uses electronic check for payments.",
-        "PaymentMethod_Mailed check":
-            "The customer uses mailed check for payments.",
-        "PaymentMethod_Bank transfer (automatic)":
-            "The customer uses automatic bank transfer for payments.",
-        "PaymentMethod_Credit card (automatic)":
-            "The customer uses automatic credit card payment."
-    }
 
-    if feature_clean in descriptions:
-        base_text = descriptions[feature_clean]
-    elif feature_clean == "tenure":
-        base_text = (
-            f"The customer has been with the company for "
-            f"{customer['tenure']} months."
-        )
-    elif feature_clean == "MonthlyCharges":
-        base_text = (
-            f"The customer's monthly charge is "
-            f"${customer['MonthlyCharges']:.2f}."
-        )
-    elif feature_clean == "TotalCharges":
-        base_text = (
-            f"The customer's total charges are "
-            f"${customer['TotalCharges']:.2f}."
-        )
-    elif feature_clean == "SeniorCitizen":
-        status = "Yes" if customer["SeniorCitizen"] == 1 else "No"
+def format_feature_name(feature, value=None):
+    label = FEATURE_LABELS.get(feature, feature)
+    if value is not None:
+        val_str = format_feature_value(feature, value)
+        return f"{label}: {val_str}"
+    return label
+
+
+def get_explanation_text(feature, value, direction):
+    label = FEATURE_LABELS.get(feature, feature)
+
+    if feature == "Contract":
+        base_text = f"The customer has a {value.lower()} contract."
+    elif feature == "InternetService":
+        if value == "No":
+            base_text = "The customer does not have internet service."
+        else:
+            base_text = f"The customer uses {value} internet service."
+    elif feature == "tenure":
+        base_text = f"The customer has been with the company for {value} months."
+    elif feature == "MonthlyCharges":
+        base_text = f"The customer's monthly charge is ${float(value):.2f}."
+    elif feature == "TotalCharges":
+        base_text = f"The customer's accumulated total charges are ${float(value):.2f}."
+    elif feature == "PaymentMethod":
+        base_text = f"The customer pays via {value.lower()}."
+    elif feature == "SeniorCitizen":
+        status = "Yes" if value == 1 else "No"
         base_text = f"The customer is a senior citizen: {status}."
+    elif feature == "gender":
+        base_text = f"The customer is {value.lower()}."
+    elif feature in ["Partner", "Dependents", "PhoneService", "PaperlessBilling"]:
+        if value == "Yes":
+            base_text = f"The customer has {label.lower()}."
+        else:
+            base_text = f"The customer does not have {label.lower()}."
+    elif feature in [
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies"
+    ]:
+        if value == "Yes":
+            base_text = f"The customer is subscribed to {label.lower()}."
+        elif value == "No":
+            base_text = f"The customer is not subscribed to {label.lower()}."
+        else:
+            base_text = f"The customer has no internet service for {label.lower()}."
+    elif feature == "MultipleLines":
+        if value == "Yes":
+            base_text = "The customer has multiple phone lines."
+        elif value == "No":
+            base_text = "The customer has a single phone line."
+        else:
+            base_text = "The customer does not have phone service."
     else:
-        base_text = (
-            f"The customer has the characteristic "
-            f"{format_feature_name(feature, customer)}."
-        )
+        base_text = f"The customer's {label} is {value}."
 
     if direction == "increase":
-        return (
-            f"{base_text} This characteristic increased "
-            f"the model's estimated churn risk."
-        )
-
-    return (
-        f"{base_text} This characteristic reduced "
-        f"the model's estimated churn risk."
-    )
+        return f"{base_text} This characteristic increased the model's estimated churn risk."
+    return f"{base_text} This characteristic reduced the model's estimated churn risk."
 
 
 predictor = load_predictor()
 explainer = load_explainer()
 
 
-st.title("ChurnShield")
-st.subheader("Customer Churn Risk Prediction")
+st.title("🛡️ ChurnShield")
+st.subheader("Customer Churn Risk Prediction & Explainability Platform")
 
 st.write(
     """
     ChurnShield predicts whether a customer is likely to leave
-    the company and explains the main factors behind the prediction.
+    the company and explains the key factors driving the prediction using SHAP.
     """
 )
 
@@ -224,7 +140,6 @@ col1, col2, col3 = st.columns(3)
 
 
 with col1:
-
     gender = st.selectbox(
         "Gender",
         ["Male", "Female"]
@@ -260,7 +175,6 @@ with col1:
 
 
 with col2:
-
     multiple_lines = st.selectbox(
         "Multiple Lines",
         ["Yes", "No", "No phone service"]
@@ -293,7 +207,6 @@ with col2:
 
 
 with col3:
-
     streaming_tv = st.selectbox(
         "Streaming TV",
         ["Yes", "No", "No internet service"]
@@ -329,13 +242,13 @@ with col3:
     )
 
     monthly_charges = st.number_input(
-        "Monthly Charges",
+        "Monthly Charges ($)",
         min_value=0.0,
         value=70.0
     )
 
     total_charges = st.number_input(
-        "Total Charges",
+        "Total Charges ($)",
         min_value=0.0,
         value=1000.0
     )
@@ -395,7 +308,6 @@ if st.button(
         )
 
     with col3:
-
         prediction_text = (
             "Likely to Churn"
             if prediction == 1
@@ -407,43 +319,35 @@ if st.button(
             prediction_text
         )
 
-
     st.subheader("What does this mean?")
 
     if probability >= 0.7:
-
         st.warning(
             f"""
-            The model estimates a {probability * 100:.1f}% probability
+            The model estimates a **{probability * 100:.1f}% probability**
             that this customer may leave the company.
 
-            This customer shows a relatively high predicted churn risk.
+            This customer shows a **high predicted churn risk**. Immediate retention strategies are recommended.
             """
         )
-
     elif probability >= 0.4:
-
         st.info(
             f"""
-            The model estimates a {probability * 100:.1f}% probability
+            The model estimates a **{probability * 100:.1f}% probability**
             that this customer may leave the company.
 
-            The customer shows some signs of churn risk.
+            The customer shows **moderate signs of churn risk**. Consider proactive engagement.
             """
         )
-
     else:
-
         st.success(
             f"""
-            The model estimates a {probability * 100:.1f}% probability
+            The model estimates a **{probability * 100:.1f}% probability**
             that this customer may leave the company.
 
-            Based on the information provided, the customer currently
-            shows relatively low predicted churn risk.
+            Based on the information provided, the customer currently shows **low churn risk**.
             """
         )
-
 
     st.divider()
 
@@ -451,134 +355,82 @@ if st.button(
 
     st.write(
         """
-        The model considers many characteristics of the customer.
-        SHAP helps explain which characteristics had the largest
-        influence on this particular prediction.
-
-        These explanations describe how the model arrived at its
-        prediction. They do not mean that a particular characteristic
-        directly causes a customer to churn.
+        The model considers multiple characteristics of the customer.
+        **SHAP (SHapley Additive exPlanations)** calculates the exact contribution of each factor
+        toward the final churn risk score.
         """
     )
 
+    explanation = explainer.explain(customer, aggregate=True)
 
-    explanation = explainer.explain(customer)
-
-    top_features = explanation.head(8).copy()
-
-    increasing_risk = top_features[
-        top_features["shap_value"] > 0
+    increasing_risk = explanation[
+        explanation["shap_value"] > 0
     ].head(5)
 
-    decreasing_risk = top_features[
-        top_features["shap_value"] < 0
+    decreasing_risk = explanation[
+        explanation["shap_value"] < 0
     ].sort_values(
         "shap_value"
     ).head(5)
 
+    factor_col1, factor_col2 = st.columns(2)
 
-    st.subheader("Factors increasing churn risk")
+    with factor_col1:
+        st.subheader("🔺 Factors increasing churn risk")
 
-    if increasing_risk.empty:
-
-        st.write(
-            "None of the strongest contributing factors increased "
-            "the model's estimated churn risk."
-        )
-
-    else:
-
-        for _, row in increasing_risk.iterrows():
-
-            feature = row["feature"]
-            shap_value = row["shap_value"]
-
-            readable_feature = format_feature_name(
-                feature,
-                customer
-            )
-
-            explanation_text = get_explanation_text(
-                feature,
-                "increase",
-                customer
-            )
-
+        if increasing_risk.empty:
             st.write(
-                f"**{readable_feature}**"
+                "None of the primary contributing factors increased the model's estimated churn risk."
             )
+        else:
+            for _, row in increasing_risk.iterrows():
+                feat = row["feature"]
+                val = row["feature_value"]
+                shap_val = row["shap_value"]
 
-            st.caption(
-                f"{explanation_text} "
-                f"(Model contribution: {shap_value:.4f})"
-            )
+                readable_feature = format_feature_name(feat, val)
+                explanation_text = get_explanation_text(feat, val, "increase")
 
+                st.markdown(f"**{readable_feature}**")
+                st.caption(
+                    f"{explanation_text} (SHAP contribution: +{shap_val:.4f})"
+                )
 
-    st.subheader("Factors reducing churn risk")
+    with factor_col2:
+        st.subheader("🔻 Factors reducing churn risk")
 
-    if decreasing_risk.empty:
-
-        st.write(
-            "None of the strongest contributing factors reduced "
-            "the model's estimated churn risk."
-        )
-
-    else:
-
-        for _, row in decreasing_risk.iterrows():
-
-            feature = row["feature"]
-            shap_value = row["shap_value"]
-
-            readable_feature = format_feature_name(
-                feature,
-                customer
-            )
-
-            explanation_text = get_explanation_text(
-                feature,
-                "decrease",
-                customer
-            )
-
+        if decreasing_risk.empty:
             st.write(
-                f"**{readable_feature}**"
+                "None of the primary contributing factors reduced the model's estimated churn risk."
             )
+        else:
+            for _, row in decreasing_risk.iterrows():
+                feat = row["feature"]
+                val = row["feature_value"]
+                shap_val = row["shap_value"]
 
-            st.caption(
-                f"{explanation_text} "
-                f"(Model contribution: {shap_value:.4f})"
-            )
+                readable_feature = format_feature_name(feat, val)
+                explanation_text = get_explanation_text(feat, val, "decrease")
 
+                st.markdown(f"**{readable_feature}**")
+                st.caption(
+                    f"{explanation_text} (SHAP contribution: {shap_val:.4f})"
+                )
 
-    with st.expander(
-        "View detailed model explanation"
-    ):
+    with st.expander("📊 View detailed model explanation (All Features)"):
+        display_df = explanation.copy()
 
-        display_df = explanation[
-            [
-                "feature",
-                "shap_value",
-                "importance"
-            ]
-        ].copy()
-
-        display_df["Feature"] = display_df[
-            "feature"
-        ].apply(
-            lambda x: format_feature_name(
-                x,
-                customer
-            )
+        display_df["Feature"] = display_df["feature"].apply(
+            lambda f: FEATURE_LABELS.get(f, f)
         )
-
-        display_df["Impact"] = display_df[
-            "shap_value"
-        ].apply(
-            lambda x:
-                "Increases churn risk"
-                if x > 0
-                else "Reduces churn risk"
+        display_df["Customer Value"] = display_df.apply(
+            lambda r: format_feature_value(r["feature"], r["feature_value"]),
+            axis=1
+        )
+        display_df["Impact"] = display_df["shap_value"].apply(
+            lambda x: "Increases churn risk" if x > 0 else (
+                "Reduces churn risk" if x < 0 else "Neutral"
+            )
         )
 
         display_df = display_df.rename(
@@ -591,6 +443,7 @@ if st.button(
         display_df = display_df[
             [
                 "Feature",
+                "Customer Value",
                 "SHAP Value",
                 "Importance",
                 "Impact"
@@ -611,13 +464,11 @@ if st.button(
             }
         )
 
-
     st.caption(
         """
-        SHAP values indicate how individual features influenced the
-        model's prediction. Positive values push the prediction toward
-        churn, while negative values push it toward staying. SHAP
-        describes model behavior and should not be interpreted as
-        proof of causation.
+        ℹ️ **Note on Explainability**: SHAP values indicate how individual features influenced
+        the model's prediction relative to the baseline population. Positive values push the
+        prediction toward churn, while negative values push it toward customer retention.
+        SHAP describes model behavior and should not be interpreted as causal proof.
         """
     )
